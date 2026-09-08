@@ -1,0 +1,9 @@
+AP_SSID,BallBalancer,SSID in AP mode
+AP_PSW,leman2102,Password in AP mode
+STA_SSID,GrossoModo,SSID Wifi principal
+STA_PSW,resnonverba,Mot de passe Wifi principal
+staIp,192.168.2.80,Ip souhaitée en mode STA
+staGateway,192.168.2.1,Gateway en mode STA
+staSubnet,255.255.0.0,Subnet en mode STA
+staDNS,192.168.2.1,DNS en mode STA 
+GMT_offset,2,Heure d'hiver (1) d'été (2)

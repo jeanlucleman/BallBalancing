@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../BallBalancer"
+		},
+		{
+			"name": "FreeRTOS",
+			"path": "../../../../../FreeRTOS"
+		},
+		{
+			"path": "../../../../../../../Alarme/02 - Software/Alarme/CentralUnit/ESP1_Server"
+		}
+	],
+	"settings": {}
+}

@@ -1,0 +1,86 @@
+<style>
+.slider {
+  width:80%%;
+  -webkit-appearance:none;
+  appearance:none;
+  text-align: center;
+  height:25px;
+  margin-left: 25px;
+  background: #d3d3d3; /* Grey background */
+  outline: none; /* Remove outline */
+  opacity: 0.7; /* Set transparency (for mouse-over effects on hover) */
+  -webkit-transition: .2s; /* 0.2 seconds transition on hover */
+  transition: opacity .2s;
+
+}
+/* Mouse-over effects */
+.slider:hover {
+  opacity: 1; /* Fully shown on mouse-over */
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none; /* Override default look */
+  appearance: none;
+  width: 25px; /* Set a specific slider handle width */
+  height: 25px; /* Slider handle height */
+  background: #04AA6D; /* Green background */
+  cursor: pointer; /* Cursor on hover */
+}
+.slider::-moz-range-thumb {
+  width: 25px; /* Set a specific slider handle width */
+  height: 25px; /* Slider handle height */
+  background: #04AA6D; /* Green background */
+  cursor: pointer; /* Cursor on hover */
+}
+</style>
+
+<div class="w3-sand">
+  <H4>Aucun contenu pour le moment!</H4>
+
+
+
+    
+    <p>Servo X: <span id="idTxtServoX"></span></p>
+    <input type="range" min="%MINDUTYX%" max="%MAXDUTYX%" value="%MDLDUTYX%" class="slider" id="idRangeServoX" onchange="setServo()";>
+    
+    <p>Servo Y: <span id="idTxtServoY"></span></p>
+    <input type="range" min="%MINDUTYY%" max="%MAXDUTYY%" value="%MDLDUTYY%"  class="slider" id="idRangeServoY" onchange="setServo()";>
+
+
+</div>  
+
+<script>
+  var sliderX = document.getElementById("idRangeServoX");
+  var outputX= document.getElementById("idTxtServoX");
+  outputX.innerHTML = sliderX.value;
+  var sliderY = document.getElementById("idRangeServoY");
+  var outputY = document.getElementById("idTxtServoY");
+  outputY.innerHTML = sliderY.value;
+  
+  sliderX.oninput = function() {
+    outputX.innerHTML = this.value;
+  }
+  sliderY.oninput = function() {
+    outputY.innerHTML = this.value;
+  }
+  function setServo(){
+      // alert("Entrée dans updateConfHardware!");
+    var xValue = sliderX.value;
+    var yValue = sliderY.value;
+    var xhttp = new XMLHttpRequest();
+    xhttp.open("POST", "setServo", true);
+    var params = "xValue=" + xValue + "&yValue=" + yValue;
+    //Send the proper header information along with the request
+    xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+    xhttp.setRequestHeader("Content-length", params.length);
+    xhttp.setRequestHeader("Connection", "close");
+    xhttp.onreadystatechange = function() {//Call a function when the state changes.
+      if(xhttp.readyState == 4 && xhttp.status == 200) {
+        alert(xhttp.responseText);
+      }
+    }
+    xhttp.send(params);
+
+
+
+  }
+  </script>

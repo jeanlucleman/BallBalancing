@@ -1,0 +1,16 @@
+pinXp,25,X+ touch pin number Blanc
+pinXm,32,X- touch pin number Violet ADC1
+pinYp,33,Y+ touch pin number Gris   ADC1
+pinYm,26,Y- touch pin number Noir
+xMin,3850, X value left side
+xMax,150, X value right side
+yMin,400, Y value bottom side
+yMax,3400, Y value top side
+pinServoX,4,pin servo X
+pinServoY,12,pin servo Y
+mdlDutyX,65,Middle range X
+mdlDutyY,65,Middle range Y
+minDutyX,35,Min range X
+minDutyY,41,Min range Y
+maxDutyX,90,Max range X
+maxDutyY,85,Max range Y

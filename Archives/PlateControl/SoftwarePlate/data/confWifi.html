@@ -1,0 +1,83 @@
+<table class="w3-table w3-sand" style="border:1px solid black;padding:50px;">
+  <TR style="border:1px solid black;background-color: #ede5d6;">
+    <TD colspan=2><H4>Configuration Wifi</H4></TD>
+  </TR>
+  <!-- Name, STA IP, mai ssid, main psw f SSID, F psw, GW, SN, DNS, NTP server, DST-->
+  <!-- <TR>
+    <TD>Unit Name:
+    <TD><input class='w3-input' type='text' name='name' id='idName' maxlength=25 value='%ESPNAME%'>-->
+  <tr>
+    <td>Ip en mode STA</td>
+    <td><input class='w3-input' type='text' name='staIp' id='idStaIp' maxlength=31 value='%STAIP%'></td>
+  </tr>
+  <TR>
+    <TD>Main SSID:
+    <TD><input class='w3-input' type='text' name='mainSSID' id='idMainSSID' maxlength=31 value='%MAINSSID%'>
+  <TR>
+    <TD>Main WPA Key:<TD><input class='w3-input' type='password' name='mainpsw' id='idMainPSW' maxlength=63 value='%MAINPSW%'>
+  <!--<TR>
+    <TD>Fallback SSID:
+    <TD><input class='w3-input' type='text' name='fallbackssid' id='idFallbackSSID' maxlength=31 value='%FALLBACKSSID%'>
+  <TR>
+    <TD>Fallback WPA Key:
+    <TD><input class='w3-input' type='password' name='fallbackpsw' id='idFallbackPSW' maxlength=63 value='%FALLBACKPSW%'>-->
+  <tr>
+    <td>Gateway (mode STA)</td>
+    <td><input class='w3-input' type='text' name='staGateway' id='idStaGateway' maxlength=31 value='%STAGATEWAY%'></td>
+  </tr>
+  <tr>
+    <td>Subnet (mode STA)</td>
+    <td><input class='w3-input' type='text' name='staSubnet' id='idStaSubnet' maxlength=31 value='%STASUBNET%'></td>
+  </tr>
+  <tr>
+    <td>DNS (mode STA)</td>
+    <td><input class='w3-input' type='text' name='staDNS' id='idStaDNS' maxlength=31 value='%STADNS%'></td>
+  </tr>
+
+
+
+
+
+
+  
+  <TR>
+    <TD >
+    <TD class="w3-left">
+      <input class='w3-button w3-border w3-light-grey' id='save_changes' type='submit' onclick="updateConfWifi();"  value='Save changes'>
+    </TD>
+
+
+
+</table>
+<script>
+// Cette fonction est activée par l'event click sur le bouton Save change du formulaire Config
+function updateConfWifi(){
+  alert("Entrée dans updateConfWifi!");
+	var mainSSID = document.getElementById("idMainSSID").value;
+  var mainPSW = document.getElementById("idMainPSW").value;
+  var staIp = document.getElementById("idStaIp").value;
+  var staGateway = document.getElementById("idStaGateway").value;
+  var staSubnet = document.getElementById("idStaSubnet").value;
+  var staDNS = document.getElementById("idStaDNS").value;
+
+	var xhttp = new XMLHttpRequest();
+	xhttp.open("POST", "updateConfWifi", true);
+  var params = "mainSSID=" + mainSSID 
+  + "&mainPSW=" + mainPSW 
+  + "&staIp=" + staIp
+  + "&staSubnet=" + staSubnet
+  + "&staGateway=" + staGateway
+  + "&staDNS=" + staDNS
+  ;
+ 	//Send the proper header information along with the request
+	xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+	xhttp.setRequestHeader("Content-length", params.length);
+	xhttp.setRequestHeader("Connection", "close");
+	xhttp.onreadystatechange = function() {//Call a function when the state changes.
+		if(xhttp.readyState == 4 && xhttp.status == 200) {
+			alert(xhttp.responseText);
+		}
+	}
+	xhttp.send(params);
+}
+</script>

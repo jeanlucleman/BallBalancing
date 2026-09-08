@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+	<head>
+		<title>Ball balancer</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8" /> <!-- A mettre tout en haut sinon problème d'accent dans les alert de JS -->
+		<!-- <meta http-equiv="Cache-control" content="public"> -->
+		<link rel="icon" type="image/x-icon" href="favicon.ico">
+		<link rel="stylesheet" type="text/css" href="w3.css">
+		<script>
+			// The aim of this script is to adapt the href link if the page is called directly from STA ip of the device or if it is called from the proxy 
+			// (so from inside or from outside)
+			var espName="BallBalancer"; // This name must be the same as in the proxy conf file:  it is used in the URL when the device is called from the proxy
+			var loc=location.pathname ; // If the page is called from the proxy, then the pathname contains the ESP name (as this is defined in the proxy conf on the Apache2 server)
+			// alert(loc);
+			if(loc.indexOf(espName)!=-1)
+				{
+					loc="/"+espName + "/"; // Si le nom est contenu dans le chemin cela signifie qu'on a fait un appel via le proxy
+				}
+			else  
+				{
+					loc="/"; 
+				}
+		</script>
+		<!-- <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.8/jquery.min.js"></script>  -->
+		<script type="text/javascript" src="jquery-1.8.3.min.js"></script>
+		<style>
+		h1 {font-size: 48px;text-align: center;}	
+		h2 {font-size: 36px;text-align: center;}
+		h3 {font-size: 36px;}
+		h4 {font-size: 24px;text-align:center;}
+		h5 {font-size: 20px;}
+		h6 {font-size: 18px;}
+		hr {border-color:black; margin-left:15%;margin-right:15%;}
+		td {border:0px solid red; padding-left:10px!important;}
+		.w3-input {border:1px solid black;padding:3px;}
+
+	</style>
+	<script> 
+		$(function(){
+			$("#includedContent").load("%PAGENAME%.html"); // lors du chargement de la page, l'élément d'id includecontent est rempli avec le contenu du fichier html.
+		});
+		</script>
+	</head>
+  <body onload="colorMenu()">
+		<div class="w3-sidebar w3-bar-block w3-collapse w3-card w3-animate-left" style="width:200px;background-color: #d8dde4;" id="mySidebar">
+			<button class="w3-bar-item w3-button w3-large w3-hide-large" style="text-align:right;" onclick="w3_close()">&times;</button>
+			<h4>MENU</h4>
+			<button class="w3-bar-item w3-button tablink w3-hover-black" id="idButtonsummary" onclick="window.location.href = loc">Synthèse</button>
+			<button class="w3-bar-item w3-button tablink w3-hover-black" id="idButtonconfWifi" onclick="window.location.href = loc+  'confWifi'">Configuration wifi</button>
+
+			<button class="w3-bar-item w3-button tablink w3-hover-black" id="idButtonconfHardware" onclick="window.location.href = loc+  'confHardware'">Configuration hardware</button>
+			<button class="w3-bar-item w3-button tablink w3-hover-black" id="idButtonservoCalibration" onclick="window.location.href = loc+  'servoCalibration'">Servo calibration</button>
+
+			<button class="w3-bar-item w3-button tablink w3-hover-black" id="idButtoninfo" onclick="window.location.href = loc+  'info'">Information</button>
+			<button class="w3-bar-item w3-button tablink w3-hover-black" id="idButtonfiles" onclick="window.location.href = loc + 'files'">Fichiers</button>
+			<button class="w3-bar-item w3-button tablink w3-hover-black" onclick="window.location.href = loc + 'reboot';">Reboot</button>
+		</div>
+		<div class="w3-main" style="margin-left:200px">
+			<div class="w3-teal">
+				<div style="display:flex">
+					<div><button class="w3-button w3-teal w3-xlarge w3-hide-large"  onclick="w3_open()">&#9776;</button></div>
+					<div style="flex-grow:100;"><h5 style="vertical-align:middle;margin-left: auto; margin-right:auto;text-align:center;">%DESCRIPTION%</h5></div>
+				</div>
+				<div class="w3-container page" id="id%PAGENAME%" style="padding:0px;">
+					<div id="includedContent"></div>
+				</div>
+				<!-- <script type="text/javascript" src="copyright.js"></script> -->
+				<div style="flex-grow:100;"><h6 style="vertical-align:middle;margin-left: auto; margin-right:auto;text-align:center;font-size:0.65em;">Copyright JLL 2024, all rights reserved.</h6></div>
+				</div>
+		</div>
+		<script>
+			function colorMenu(){
+				var i, tablinks;
+				tablinks = document.getElementsByClassName("tablink");
+				for (i = 0; i < tablinks.length; i++) {
+					if(tablinks[i].id=="idButton%PAGENAME%"){
+						tablinks[i].className = tablinks[i].className += " w3-red";
+					}
+				
+				}  
+				// alert("colorMenu");
+			}
+			function viewPage(evt, pageName) {
+				var i, tablinks;
+				tablinks = document.getElementsByClassName("tablink");
+				for (i = 0; i < tablinks.length; i++) {
+				tablinks[i].className = tablinks[i].className.replace(" w3-red", "");
+				}
+				w3_close();
+				evt.currentTarget.className += " w3-red";
+				alert("viewPage");
+			}
+			function w3_open() {
+				document.getElementById("mySidebar").style.display = "block";
+			}
+
+			function w3_close() {
+				document.getElementById("mySidebar").style.display = "none";
+			}
+		</script>
+	</body>
+</html>

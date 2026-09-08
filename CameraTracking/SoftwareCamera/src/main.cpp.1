@@ -1,0 +1,481 @@
+#include "esp_camera.h"
+#include "Arduino.h"
+// ============================================================
+// AI-Thinker ESP32-CAM
+// ============================================================
+
+#define PWDN_GPIO_NUM     32
+#define RESET_GPIO_NUM    -1
+#define XCLK_GPIO_NUM      0
+#define SIOD_GPIO_NUM     26
+#define SIOC_GPIO_NUM     27
+
+#define Y9_GPIO_NUM       35
+#define Y8_GPIO_NUM       34
+#define Y7_GPIO_NUM       39
+#define Y6_GPIO_NUM       36
+#define Y5_GPIO_NUM       21
+#define Y4_GPIO_NUM       19
+#define Y3_GPIO_NUM       18
+#define Y2_GPIO_NUM        5
+
+#define VSYNC_GPIO_NUM    25
+#define HREF_GPIO_NUM     23
+#define PCLK_GPIO_NUM     22
+
+
+// ============================================================
+// Image
+// ============================================================
+
+constexpr int WIDTH  = 320;
+constexpr int HEIGHT = 240;
+
+
+// ============================================================
+// Detection
+// ============================================================
+
+// Brightness threshold
+constexpr uint8_t THRESHOLD = 180;
+
+// At 200 mm the 24 mm ball should be approximately
+// 38 pixels in diameter.
+//
+// Expected area approximately 1100 pixels.
+//
+// Keep the limits deliberately wide initially.
+constexpr uint16_t MIN_AREA = 350;
+constexpr uint16_t MAX_AREA = 700;
+
+constexpr uint16_t MIN_DIAMETER = 20;
+constexpr uint16_t MAX_DIAMETER = 32;
+
+
+// ============================================================
+// Region of interest
+//
+// For now we use almost the complete image.
+// We can reduce this after seeing the results.
+// ============================================================
+
+constexpr int ROI_X0 = 0;
+constexpr int ROI_X1 = WIDTH - 1;
+
+constexpr int ROI_Y0 = 0;
+constexpr int ROI_Y1 = HEIGHT - 1;
+
+
+// ============================================================
+// Visited buffer
+// ============================================================
+
+uint8_t visited[WIDTH * HEIGHT];
+
+
+// ============================================================
+// Camera initialization
+// ============================================================
+
+bool initCamera()
+{
+    camera_config_t config;
+
+    config.ledc_channel = LEDC_CHANNEL_0;
+    config.ledc_timer   = LEDC_TIMER_0;
+
+    config.pin_d0 = Y2_GPIO_NUM;
+    config.pin_d1 = Y3_GPIO_NUM;
+    config.pin_d2 = Y4_GPIO_NUM;
+    config.pin_d3 = Y5_GPIO_NUM;
+    config.pin_d4 = Y6_GPIO_NUM;
+    config.pin_d5 = Y7_GPIO_NUM;
+    config.pin_d6 = Y8_GPIO_NUM;
+    config.pin_d7 = Y9_GPIO_NUM;
+
+    config.pin_xclk = XCLK_GPIO_NUM;
+
+    config.pin_pclk  = PCLK_GPIO_NUM;
+    config.pin_vsync = VSYNC_GPIO_NUM;
+    config.pin_href  = HREF_GPIO_NUM;
+
+    config.pin_sccb_sda = SIOD_GPIO_NUM;
+    config.pin_sccb_scl = SIOC_GPIO_NUM;
+
+    config.pin_pwdn  = PWDN_GPIO_NUM;
+    config.pin_reset = RESET_GPIO_NUM;
+
+    config.xclk_freq_hz = 20000000;
+
+    config.pixel_format = PIXFORMAT_GRAYSCALE;
+
+    config.frame_size = FRAMESIZE_QVGA;
+
+    config.jpeg_quality = 12;
+
+    config.fb_count = 1;
+
+    esp_err_t err = esp_camera_init(&config);
+
+    if (err != ESP_OK)
+    {
+        Serial.printf(
+            "Camera initialization failed: 0x%x\n",
+            err
+        );
+
+        return false;
+    }
+
+    return true;
+}
+
+
+// ============================================================
+// Find ball
+// ============================================================
+
+bool findBall(
+    camera_fb_t *fb,
+    float &centerX,
+    float &centerY,
+    uint32_t &bestArea,
+    int &bestMinX,
+    int &bestMaxX,
+    int &bestMinY,
+    int &bestMaxY
+)
+{
+    memset(visited, 0, sizeof(visited));
+
+    bool found = false;
+
+    bestArea = 0;
+
+
+    // --------------------------------------------------------
+    // Scan image
+    // --------------------------------------------------------
+
+    for (int startY = ROI_Y0; startY <= ROI_Y1; startY++)
+    {
+        for (int startX = ROI_X0; startX <= ROI_X1; startX++)
+        {
+            int startIndex = startY * WIDTH + startX;
+
+            if (visited[startIndex])
+                continue;
+
+
+            uint8_t pixel =
+                fb->buf[startIndex];
+
+            if (pixel <= THRESHOLD)
+                continue;
+
+
+            // ------------------------------------------------
+            // New bright component
+            // ------------------------------------------------
+
+            const uint32_t MAX_QUEUE = 10000;
+
+            static uint16_t queue[MAX_QUEUE];
+
+            uint32_t queueStart = 0;
+            uint32_t queueEnd   = 0;
+
+
+            queue[queueEnd++] =
+                (uint16_t)startIndex;
+
+            visited[startIndex] = 1;
+
+
+            uint32_t area = 0;
+
+            uint32_t sumX = 0;
+            uint32_t sumY = 0;
+
+            int minX = startX;
+            int maxX = startX;
+            int minY = startY;
+            int maxY = startY;
+
+
+            // ------------------------------------------------
+            // Flood fill
+            // ------------------------------------------------
+
+            while (queueStart < queueEnd)
+            {
+                uint16_t index =
+                    queue[queueStart++];
+
+
+                int x = index % WIDTH;
+                int y = index / WIDTH;
+
+
+                area++;
+
+                sumX += x;
+                sumY += y;
+
+
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+
+
+                // --------------------------------------------
+                // Four neighbours
+                // --------------------------------------------
+
+                // Left
+                if (x > ROI_X0)
+                {
+                    int nx = x - 1;
+                    int ny = y;
+                    int ni = ny * WIDTH + nx;
+
+                    if (!visited[ni] &&
+                        fb->buf[ni] > THRESHOLD)
+                    {
+                        visited[ni] = 1;
+
+                        if (queueEnd < MAX_QUEUE)
+                            queue[queueEnd++] = ni;
+                    }
+                }
+
+
+                // Right
+                if (x < ROI_X1)
+                {
+                    int nx = x + 1;
+                    int ny = y;
+                    int ni = ny * WIDTH + nx;
+
+                    if (!visited[ni] &&
+                        fb->buf[ni] > THRESHOLD)
+                    {
+                        visited[ni] = 1;
+
+                        if (queueEnd < MAX_QUEUE)
+                            queue[queueEnd++] = ni;
+                    }
+                }
+
+
+                // Up
+                if (y > ROI_Y0)
+                {
+                    int nx = x;
+                    int ny = y - 1;
+                    int ni = ny * WIDTH + nx;
+
+                    if (!visited[ni] &&
+                        fb->buf[ni] > THRESHOLD)
+                    {
+                        visited[ni] = 1;
+
+                        if (queueEnd < MAX_QUEUE)
+                            queue[queueEnd++] = ni;
+                    }
+                }
+
+
+                // Down
+                if (y < ROI_Y1)
+                {
+                    int nx = x;
+                    int ny = y + 1;
+                    int ni = ny * WIDTH + nx;
+
+                    if (!visited[ni] &&
+                        fb->buf[ni] > THRESHOLD)
+                    {
+                        visited[ni] = 1;
+
+                        if (queueEnd < MAX_QUEUE)
+                            queue[queueEnd++] = ni;
+                    }
+                }
+            }
+
+
+            // ------------------------------------------------
+            // Evaluate component
+            // ------------------------------------------------
+
+            int diameterX = maxX - minX + 1;
+            int diameterY = maxY - minY + 1;
+
+            int diameter =
+                max(diameterX, diameterY);
+
+
+            float aspectRatio =
+                (float)diameterX / (float)diameterY;
+
+            if (aspectRatio < 1.0)
+                aspectRatio = 1.0 / aspectRatio;
+
+
+            if (area >= MIN_AREA &&
+                area <= MAX_AREA &&
+
+                diameterX >= MIN_DIAMETER &&
+                diameterX <= MAX_DIAMETER &&
+
+                diameterY >= MIN_DIAMETER &&
+                diameterY <= MAX_DIAMETER &&
+
+                aspectRatio <= 1.25)
+{
+                // Keep the largest valid component
+
+                if (!found || area > bestArea)
+                {
+                    found = true;
+
+                    bestArea = area;
+
+                    bestMinX = minX;
+                    bestMaxX = maxX;
+                    bestMinY = minY;
+                    bestMaxY = maxY;
+
+                    centerX =
+                        (float)sumX / area;
+
+                    centerY =
+                        (float)sumY / area;
+                }
+            }
+        }
+    }
+
+    return found;
+}
+
+
+// ============================================================
+// Setup
+// ============================================================
+
+void setup()
+{
+    Serial.begin(115200);
+
+    delay(1000);
+
+    Serial.println();
+    Serial.println("==============================");
+    Serial.println(" ESP32-CAM Ball Detector V2");
+    Serial.println("==============================");
+
+    if (!initCamera())
+    {
+        Serial.println("Camera ERROR");
+
+        while (true)
+            delay(1000);
+    }
+
+    Serial.println("Camera OK");
+}
+
+
+// ============================================================
+// Loop
+// ============================================================
+
+void loop()
+{
+    uint32_t start = millis();
+
+
+    camera_fb_t *fb =
+        esp_camera_fb_get();
+
+
+    if (!fb)
+    {
+        Serial.println("Camera capture failed");
+        return;
+    }
+
+
+    float x;
+    float y;
+
+    uint32_t area;
+
+    int minX;
+    int maxX;
+    int minY;
+    int maxY;
+
+
+    bool found = findBall(
+        fb,
+        x,
+        y,
+        area,
+        minX,
+        maxX,
+        minY,
+        maxY
+    );
+
+
+    esp_camera_fb_return(fb);
+
+
+    if (found)
+    {
+        int width =
+            maxX - minX + 1;
+
+        int height =
+            maxY - minY + 1;
+
+
+        Serial.printf(
+            "BALL  X=%6.1f  Y=%6.1f"
+            "  Area=%lu"
+            "  Box=(%d,%d)-(%d,%d)"
+            "  Size=%dx%d"
+            "  %lu ms\n",
+
+            x,
+            y,
+
+            area,
+
+            minX,
+            minY,
+            maxX,
+            maxY,
+
+            width,
+            height,
+
+            millis() - start
+        );
+    }
+    else
+    {
+        Serial.printf(
+            "No ball                         %lu ms\n",
+            millis() - start
+        );
+    }
+
+
+    delay(20);
+}

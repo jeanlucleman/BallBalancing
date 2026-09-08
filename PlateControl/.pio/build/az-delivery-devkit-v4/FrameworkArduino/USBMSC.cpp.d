@@ -1,0 +1,4 @@
+.pio/build/az-delivery-devkit-v4/FrameworkArduino/USBMSC.cpp.o: \
+ /home/jean-luc/.platformio/packages/framework-arduinoespressif32/cores/esp32/USBMSC.cpp \
+ /home/jean-luc/.platformio/packages/framework-arduinoespressif32/cores/esp32/USBMSC.h \
+ /home/jean-luc/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/dio_qspi/include/sdkconfig.h
