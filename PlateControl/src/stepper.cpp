@@ -25,10 +25,10 @@ void Stepper::ini(){
     _ini=true;
   }
 
-void Stepper::setSens(byte _sens)
+void Stepper::setSens(byte sens)
   {
-    digitalWrite(_dirPin,_sens); 
-    sens=_sens;
+    digitalWrite(_dirPin,sens); 
+    _sens=sens;
   }
 void Stepper::calibration()
   {
@@ -37,36 +37,80 @@ void Stepper::calibration()
 
 
   }
-void Stepper::movOneStep()
+void Stepper::movTo(int stepTarget,int speed)
   {
-    digitalWrite(_stepPin,HIGH); 
-    delayMicroseconds(5);
-    digitalWrite(_stepPin,LOW); 
-    sens==LOW?stepCounter++:stepCounter--; // Increments the X step counter
-  }
-
-void Stepper::movTo1(int stepToDo)
-  {
-    // Serial.printf("%s: Prev. t1=%d  micros()=%d ",name,t1,micros());
-    uint32_t dt = micros() -t1;
-
-    // Serial.printf("dt=%d   stepToDo=%d ",dt,stepToDo);
-    if(abs(stepToDo)>0)
+    int stepsToDo=stepTarget-_stepCounter;
+    stepsToDo>0?setSens(LOW):setSens(HIGH);
+    for (size_t i = 0; i < abs(stepsToDo); i++)
       {
-        int pause=dt/abs(stepToDo)/3;
-        // Serial.printf("Pause: %d\n",pause); 
-        if(pause>300){pause=300;}   
-        if(pause<25){pause=25;}
-        stepToDo>0?setSens(LOW):setSens(HIGH);
-        // Serial.printf("%s : aller au step n° %d\n", name,stepToDo);
-        for (size_t i = 0; i < abs(stepToDo); i++)
+        movOneStep(speed);
+        // delayMicroseconds(pause);
+      }     
+    // Serial.printf("Sortie de movBySteps dans l'objet stepper %s\n",name);
+}
+void Stepper::movBySteps(int steps, int speed)
+  {
+        steps>0?setSens(LOW):setSens(HIGH);
+        for (size_t i = 0; i < abs(steps); i++)
           {
-            movOneStep();
-            delayMicroseconds(pause);
+            movOneStep(speed);
+            // delayMicroseconds(pause);
           }     
-        // Serial.printf("Sortie de movTo dans l'objet stepper %s\n",name);   
-      }
-    t1=micros();
+        // Serial.printf("Sortie de movBySteps dans l'objet stepper %s\n",name);   
+      
+    // t1=micros();
     // Serial.printf("t1=%d\n",t1);
     // delayMicroseconds(50);
   }
+void Stepper::resetCounter()
+  {
+    _stepCounter=0;
+  }
+int Stepper::sens()
+  {
+    return _sens;
+  }
+int Stepper::stepCounter()
+  {
+    return _stepCounter;
+  }
+void Stepper::movOneStep(int speed)
+  {
+    if(abs(_stepCounter + (_sens==LOW?1:-1))>=stepMax)
+      {
+        _sens==LOW?Serial.print("+"):Serial.print("-");
+        return;
+      }
+    if(speed<25){speed=25;}
+    digitalWrite(_stepPin,HIGH); 
+    delayMicroseconds(speed);
+    digitalWrite(_stepPin,LOW); 
+    delayMicroseconds(speed);
+    _stepCounter+=(_sens==LOW?1:-1);
+  }
+
+// void Stepper::movTo1(int stepToDo)
+//   {
+//     // Serial.printf("%s: Prev. t1=%d  micros()=%d ",name,t1,micros());
+//     uint32_t dt = micros() -t1;
+
+//     // Serial.printf("dt=%d   stepToDo=%d ",dt,stepToDo);
+//     if(abs(stepToDo)>0)
+//       {
+//         int pause=dt/abs(stepToDo)/3;
+//         // Serial.printf("Pause: %d\n",pause); 
+//         if(pause>300){pause=300;}   
+//         if(pause<25){pause=25;}
+//         stepToDo>0?setSens(LOW):setSens(HIGH);
+//         // Serial.printf("%s : aller au step n° %d\n", name,stepToDo);
+//         for (size_t i = 0; i < abs(stepToDo); i++)
+//           {
+//             movOneStep(speed);
+//             delayMicroseconds(pause);
+//           }     
+//         // Serial.printf("Sortie de movTo dans l'objet stepper %s\n",name);   
+//       }
+//     t1=micros();
+//     // Serial.printf("t1=%d\n",t1);
+//     // delayMicroseconds(50);
+//   }

@@ -1,5 +1,4 @@
 .pio/build/az-delivery-devkit-v4/src/main.cpp.o: src/main.cpp \
- .pio/libdeps/az-delivery-devkit-v4/Adafruit\ MPU6050/Adafruit_MPU6050.h \
  /home/jean-luc/.platformio/packages/framework-arduinoespressif32/cores/esp32/Arduino.h \
  /home/jean-luc/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp_arduino_version.h \
  /home/jean-luc/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/freertos/FreeRTOS.h \
@@ -134,10 +133,11 @@
  /home/jean-luc/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_hw_support/include/soc/esp32/spiram.h \
  /home/jean-luc/.platformio/packages/framework-arduinoespressif32/cores/esp32/io_pin_remap.h \
  /home/jean-luc/.platformio/packages/framework-arduinoespressif32/cores/esp32/Arduino.h \
- .pio/libdeps/az-delivery-devkit-v4/Adafruit\ BusIO/Adafruit_BusIO_Register.h \
- .pio/libdeps/az-delivery-devkit-v4/Adafruit\ BusIO/Adafruit_I2CDevice.h \
  /home/jean-luc/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src/Wire.h \
  /home/jean-luc/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal.h \
+ .pio/libdeps/az-delivery-devkit-v4/Adafruit\ MPU6050/Adafruit_MPU6050.h \
+ .pio/libdeps/az-delivery-devkit-v4/Adafruit\ BusIO/Adafruit_BusIO_Register.h \
+ .pio/libdeps/az-delivery-devkit-v4/Adafruit\ BusIO/Adafruit_I2CDevice.h \
  .pio/libdeps/az-delivery-devkit-v4/Adafruit\ BusIO/Adafruit_SPIDevice.h \
  /home/jean-luc/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src/SPI.h \
  /home/jean-luc/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal-spi.h \

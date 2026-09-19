@@ -29,16 +29,24 @@ class Stepper {
     void ini();
     // Constructor of Settings class
     Stepper(int dirPin, int stepPin,int ms1Pin,int ms2Pin,int ms3Pin, String name); 
-    int sens;
+    int sens();
     String name;
     void setSens(byte _sens);
     int stepPerRev;
-    int stepCounter; // The number of steps already done from the horizontal position
+    // int stepCounter; 
     void calibration();
-    void movOneStep();
-    void movTo1(int stepTarget);
+    void movOneStep(int speed);
+    // void movBySteps1(int stepTarget);
+    void movBySteps(int steps, int speed);
+    void movTo(int stepTarget,int speed);
+    void resetCounter();
+    int stepCounter(); 
+    int stepMax=2000; // digital stop
      uint32_t t1;
     // unsigned long t2;
+  private:
+    int _stepCounter;// The number of steps already done from the horizontal position
+    byte _sens;
 
   };
 

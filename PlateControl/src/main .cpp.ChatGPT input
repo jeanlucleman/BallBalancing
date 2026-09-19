@@ -1,0 +1,807 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_MPU6050.h>
+#include "stepper.h"
+
+
+// ============================================================
+// MPU6050
+// ============================================================
+
+Adafruit_MPU6050 mpu;
+
+
+// I²C pins - change if necessary
+// Use your actual ESP32 SDA/SCL pins here.
+constexpr int I2C_SDA = 21;
+constexpr int I2C_SCL = 22;
+
+
+// ============================================================
+// Motors
+// ============================================================
+
+constexpr int xDirPin = 23;
+constexpr int xStepPin = 18;
+
+constexpr int yDirPin = 27;
+constexpr int yStepPin = 19;
+
+constexpr int ms1Pin = 2;
+constexpr int ms2Pin = 4;
+constexpr int ms3Pin = 15;
+
+
+Stepper stepperX(
+    xDirPin,
+    xStepPin,
+    ms1Pin,
+    ms2Pin,
+    ms3Pin,
+    "Stepper X"
+);
+
+Stepper stepperY(
+    yDirPin,
+    yStepPin,
+    ms1Pin,
+    ms2Pin,
+    ms3Pin,
+    "Stepper Y"
+);
+
+
+// ============================================================
+// FreeRTOS tasks
+// ============================================================
+
+TaskHandle_t taskReadMPU6050 = nullptr;
+TaskHandle_t taskMovToX      = nullptr;
+TaskHandle_t taskMovToY      = nullptr;
+
+
+// ============================================================
+// MPU measurement
+// ============================================================
+
+struct MPUData
+{
+    float x;
+    float y;
+    float z;
+
+    float gx;
+    float gy;
+    float gz;
+
+    uint32_t timestamp;
+};
+
+
+// The MPU task writes this structure.
+// Other tasks read it.
+//
+// Since floats are 32-bit on ESP32, individual values can be
+// read atomically, but a structure containing several values
+// can be read while it is being updated.
+//
+// Therefore we use a critical section when copying it.
+
+MPUData mpuData = {};
+
+portMUX_TYPE mpuDataMux = portMUX_INITIALIZER_UNLOCKED;
+
+
+// ============================================================
+// Motor commands
+// ============================================================
+
+volatile int xStepToDo = 0;
+volatile int yStepToDo = 0;
+
+volatile int pauseX = 100;
+volatile int pauseY = 100;
+
+
+// ============================================================
+// Synchronisation
+// ============================================================
+
+SemaphoreHandle_t xCommandMutex = nullptr;
+SemaphoreHandle_t yCommandMutex = nullptr;
+
+SemaphoreHandle_t xDone = nullptr;
+SemaphoreHandle_t yDone = nullptr;
+
+
+// ============================================================
+// Calibration
+// ============================================================
+
+float xAccPerStep = 0.0f;
+float yAccPerStep = 0.0f;
+
+
+// ============================================================
+// MPU access
+// ============================================================
+
+MPUData getMPUData()
+{
+    MPUData result;
+
+    portENTER_CRITICAL(&mpuDataMux);
+
+    result = mpuData;
+
+    portEXIT_CRITICAL(&mpuDataMux);
+
+    return result;
+}
+
+
+float accX()
+{
+    return getMPUData().x;
+}
+
+
+float accY()
+{
+    return getMPUData().y;
+}
+
+
+// ============================================================
+// MPU task
+// ============================================================
+
+void readMPU6050(void *parameters)
+{
+    Serial.println("Starting MPU6050 task");
+
+    TickType_t lastWakeTime = xTaskGetTickCount();
+
+    // 100 Hz
+    constexpr TickType_t period = pdMS_TO_TICKS(10);
+
+    for (;;)
+    {
+        vTaskDelayUntil(&lastWakeTime, period);
+
+        sensors_event_t accel;
+        sensors_event_t gyro;
+        sensors_event_t temperature;
+
+        if (mpu.getEvent(&accel, &gyro, &temperature))
+        {
+            portENTER_CRITICAL(&mpuDataMux);
+
+            mpuData.x = accel.acceleration.x;
+            mpuData.y = accel.acceleration.y;
+            mpuData.z = accel.acceleration.z;
+
+            mpuData.gx = gyro.gyro.x;
+            mpuData.gy = gyro.gyro.y;
+            mpuData.gz = gyro.gyro.z;
+
+            mpuData.timestamp = micros();
+
+            portEXIT_CRITICAL(&mpuDataMux);
+        }
+        else
+        {
+            Serial.println("MPU6050 read failed");
+        }
+    }
+}
+
+
+// ============================================================
+// Move X motor until plate is horizontal
+// ============================================================
+
+void setXPosition(int speed)
+{
+    float gammaX = accX();
+
+    stepperX.setSens(gammaX > 0 ? LOW : HIGH);
+
+    do
+    {
+        stepperX.movOneStep();
+
+        delayMicroseconds(speed);
+
+        gammaX = accX();
+
+    }
+    while (
+        stepperX.sens == LOW
+            ? gammaX > 0.01
+            : gammaX < -0.010
+    );
+
+    Serial.println("Set X done!");
+}
+
+
+// ============================================================
+// Move Y motor until plate is horizontal
+// ============================================================
+
+void setYPosition(int speed)
+{
+    float gammaY = accY();
+
+    stepperY.setSens(gammaY > 0 ? HIGH : LOW);
+
+    Serial.println("Set Y position");
+
+    do
+    {
+        stepperY.movOneStep();
+
+        delayMicroseconds(speed);
+
+        gammaY = accY();
+
+    }
+    while (
+        stepperY.sens == HIGH
+            ? gammaY > 0.01
+            : gammaY < -0.010
+    );
+
+    Serial.println("Set Y done!");
+}
+
+
+// ============================================================
+// Horizontal position
+// ============================================================
+
+void setPlateHorizontal()
+{
+    for (int i = 0; i < 3; i++)
+    {
+        setXPosition(500 + 1000 * i);
+        delay(500);
+    }
+
+    for (int i = 0; i < 3; i++)
+    {
+        setYPosition(500 + 1000 * i);
+        delay(500);
+    }
+
+    stepperX.stepCounter = 0;
+    stepperY.stepCounter = 0;
+}
+
+
+// ============================================================
+// Motor X task
+// ============================================================
+
+void movToX(void *parameters)
+{
+    for (;;)
+    {
+        if (xSemaphoreTake(xCommandMutex, portMAX_DELAY))
+        {
+            int steps = xStepToDo;
+            int pause = pauseX;
+
+            xStepToDo = 0;
+
+            xSemaphoreGive(xCommandMutex);
+
+            if (steps != 0)
+            {
+                stepperX.setSens(
+                    steps > 0 ? LOW : HIGH
+                );
+
+                int count = abs(steps);
+                uint32_t lastYield = micros();
+                for (int i = 0; i < count; i++)
+                {
+                    stepperX.movOneStep();
+
+                    delayMicroseconds(pause);
+                    if (micros() - lastYield >= 1000)
+                        {
+                            delay(1);
+                            lastYield = micros();
+                        }
+                }
+            }
+
+            xSemaphoreGive(xDone);
+        }
+    }
+}
+
+
+// ============================================================
+// Motor Y task
+// ============================================================
+
+void movToY(void *parameters)
+{
+    for (;;)
+    {
+        if (xSemaphoreTake(yCommandMutex, portMAX_DELAY))
+        {
+            int steps = yStepToDo;
+            int pause = pauseY;
+
+            yStepToDo = 0;
+
+            xSemaphoreGive(yCommandMutex);
+
+            if (steps != 0)
+            {
+                stepperY.setSens(
+                    steps > 0 ? LOW : HIGH
+                );
+
+                int count = abs(steps);
+                uint32_t lastYield = micros();
+                for (int i = 0; i < count; i++)
+                {
+                    stepperY.movOneStep();
+
+                    delayMicroseconds(pause);
+                    if (micros() - lastYield >= 1000)
+                        {
+                            delay(1);
+                            lastYield = micros();
+                        }
+                }
+            }
+
+            xSemaphoreGive(yDone);
+        }
+    }
+}
+
+
+// ============================================================
+// Move plate to absolute position
+//
+// (0,0) = horizontal position
+// ============================================================
+
+void movTo(int x, int y, int dt = 50000)
+{
+    // --------------------------------------------------------
+    // X
+    // --------------------------------------------------------
+
+    if (xSemaphoreTake(
+            xCommandMutex,
+            portMAX_DELAY))
+    {
+        int current = stepperX.stepCounter;
+
+        int steps = x - current;
+
+        if (steps != 0)
+        {
+            pauseX = abs(dt / steps);
+
+            if (pauseX < 50)
+                pauseX = 50;
+        }
+
+        xStepToDo = steps;
+
+        xSemaphoreGive(xCommandMutex);
+    }
+
+
+    // --------------------------------------------------------
+    // Y
+    // --------------------------------------------------------
+
+    if (xSemaphoreTake(
+            yCommandMutex,
+            portMAX_DELAY))
+    {
+        int current = stepperY.stepCounter;
+
+        int steps = y - current;
+
+        if (steps != 0)
+        {
+            pauseY = abs(dt / steps);
+
+            if (pauseY < 50)
+                pauseY = 50;
+        }
+
+        yStepToDo = steps;
+
+        xSemaphoreGive(yCommandMutex);
+    }
+
+
+    // --------------------------------------------------------
+    // Wait for both motors
+    // --------------------------------------------------------
+
+    bool xFinished = false;
+    bool yFinished = false;
+
+    while (!xFinished || !yFinished)
+    {
+        if (!xFinished)
+        {
+            if (xSemaphoreTake(
+                    xDone,
+                    pdMS_TO_TICKS(10)))
+            {
+                xFinished = true;
+            }
+        }
+
+        if (!yFinished)
+        {
+            if (xSemaphoreTake(
+                    yDone,
+                    pdMS_TO_TICKS(10)))
+            {
+                yFinished = true;
+            }
+        }
+    }
+}
+
+
+// ============================================================
+// Motor calibration
+// ============================================================
+
+void motorCalibration()
+{
+    vTaskSuspend(taskMovToX);
+    vTaskSuspend(taskMovToY);
+    vTaskSuspend(taskReadMPU6050);
+    const int stepMax = 1500;
+
+    float sum = 0;
+
+    int step = 0;
+
+    // --------------------------------------------------------
+    // X
+    // --------------------------------------------------------
+
+    for (int i = 0; i < stepMax; i++)
+    {
+        stepperX.movOneStep();
+
+        delayMicroseconds(200);
+        // Allow FreeRTOS IDLE0 to run
+        if ((i & 0x07) == 0)
+            delay(1);
+        step++;
+
+        if (step == stepMax / 10)
+        {
+            delay(1500);
+
+            float x = accX();
+
+            float value =
+                (float)stepMax / (float)i * x;
+
+            sum += value;
+
+            Serial.printf(
+                "X: x=%f i=%d value=%f sum=%f\n",
+                x,
+                i,
+                value,
+                sum
+            );
+
+            step = 0;
+        }
+    }
+
+    xAccPerStep =
+        sum / (float)(stepMax / 10);
+
+    Serial.printf(
+        "Acceleration X = %.6f m/s2/step\n",
+        xAccPerStep
+    );
+
+
+    // Return horizontal
+
+    movTo(0, 0);
+
+    delay(500);
+
+
+    // --------------------------------------------------------
+    // Y
+    // --------------------------------------------------------
+
+    sum = 0;
+    step = 0;
+
+    for (int i = 0; i < stepMax; i++)
+    {
+        stepperY.movOneStep();
+
+        delayMicroseconds(200);
+        // Allow FreeRTOS IDLE0 to run
+        if ((i & 0x07) == 0)
+            delay(1);
+        step++;
+
+        if (step == stepMax / 10)
+        {
+            delay(1500);
+
+            float y = accY();
+
+            float value =
+                (float)stepMax / (float)i * y;
+
+            sum += value;
+
+            Serial.printf(
+                "Y: y=%f i=%d value=%f sum=%f\n",
+                y,
+                i,
+                value,
+                sum
+            );
+
+            step = 0;
+        }
+    }
+
+    yAccPerStep =
+        sum / (float)(stepMax / 10);
+
+    Serial.printf(
+        "Acceleration Y = %.6f m/s2/step\n",
+        yAccPerStep
+    );
+    vTaskResume(taskMovToX);
+    vTaskResume(taskMovToY);
+    vTaskResume(taskReadMPU6050);
+}
+
+
+// ============================================================
+// Test rotation
+// ============================================================
+
+void turn()
+{
+    const int dt = 15000;
+
+    for (float psi = 0;
+         psi < 6.28f * 5.0f;
+         psi += 0.1f)
+    {
+        int x = 1000 * cos(psi);
+        int y = 1000 * sin(psi);
+
+        movTo(x, y, dt);
+    }
+}
+
+
+// ============================================================
+// SETUP
+// ============================================================
+
+void setup()
+{
+    Serial.begin(115200);
+
+    delay(500);
+
+    Serial.println();
+    Serial.println("================================");
+    Serial.println("Ball Balancer");
+    Serial.println("================================");
+
+
+    // --------------------------------------------------------
+    // I²C
+    // --------------------------------------------------------
+
+    Wire.begin(I2C_SDA, I2C_SCL);
+
+    // Start conservatively at 100 kHz.
+    Wire.setClock(100000);
+
+
+    // --------------------------------------------------------
+    // MPU6050
+    // --------------------------------------------------------
+
+    if (!mpu.begin(
+            MPU6050_I2CADDR_DEFAULT,
+            &Wire))
+    {
+        Serial.println(
+            "Failed to find MPU6050"
+        );
+
+        while (true)
+        {
+            delay(1000);
+        }
+    }
+
+    Serial.println("MPU6050 found");
+
+
+    mpu.setAccelerometerRange(
+        MPU6050_RANGE_2_G
+    );
+
+    mpu.setGyroRange(
+        MPU6050_RANGE_250_DEG
+    );
+
+    mpu.setFilterBandwidth(
+        MPU6050_BAND_44_HZ
+    );
+
+
+    // IMPORTANT:
+    //
+    // Do NOT use:
+    //
+    // mpu.setCycleRate(...);
+    // mpu.enableCycle(true);
+    //
+    // The MPU should continuously operate
+    // for this application.
+
+
+    // --------------------------------------------------------
+    // Synchronisation
+    // --------------------------------------------------------
+
+    xCommandMutex =
+        xSemaphoreCreateMutex();
+
+    yCommandMutex =
+        xSemaphoreCreateMutex();
+
+    xDone =
+        xSemaphoreCreateBinary();
+
+    yDone =
+        xSemaphoreCreateBinary();
+
+
+    // --------------------------------------------------------
+    // Tasks
+    // --------------------------------------------------------
+
+    xTaskCreatePinnedToCore(
+        readMPU6050,
+        "MPU6050",
+        4000,
+        nullptr,
+        20,
+        &taskReadMPU6050,
+        1
+    );
+
+
+    xTaskCreatePinnedToCore(
+        movToX,
+        "Motor X",
+        4000,
+        nullptr,
+        1,
+        &taskMovToX,
+        0
+    );
+
+
+    xTaskCreatePinnedToCore(
+        movToY,
+        "Motor Y",
+        4000,
+        nullptr,
+        1,
+        &taskMovToY,
+        0
+    );
+
+
+    // --------------------------------------------------------
+    // Give MPU task some time to obtain first measurement
+    // --------------------------------------------------------
+
+    delay(200);
+
+
+    // --------------------------------------------------------
+    // Initial horizontal positioning
+    // --------------------------------------------------------
+
+    setPlateHorizontal();
+
+    Serial.println(
+        "Plate horizontal"
+    );
+
+
+    // --------------------------------------------------------
+    // Test movements
+    // --------------------------------------------------------
+
+    movTo(2000, 0);
+    delay(500);
+
+    movTo(0, 2000);
+    delay(500);
+
+    movTo(-2000, 0);
+    delay(500);
+
+    movTo(0, -2000);
+    delay(500);
+
+    movTo(0, 0);
+
+    delay(500);
+
+
+    // --------------------------------------------------------
+    // Calibration
+    // --------------------------------------------------------
+
+    motorCalibration();
+
+    movTo(0, 0);
+
+    Serial.println(
+        "Setup completed"
+    );
+}
+
+
+// ============================================================
+// LOOP
+// ============================================================
+
+void loop()
+{
+    static uint32_t lastPrint = 0;
+
+    if (millis() - lastPrint >= 500)
+    {
+        lastPrint = millis();
+
+        MPUData data = getMPUData();
+
+        Serial.printf(
+            "AX=%+.3f  AY=%+.3f  "
+            "GX=%+.3f  GY=%+.3f\n",
+            data.x,
+            data.y,
+            data.gx,
+            data.gy
+        );
+    }
+
+    delay(10);
+}
